@@ -2,9 +2,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 
-
-file_name = 'C:/Users/mpg/Desktop/python_rasio/rasio.xlsx'
+file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx'
 df = pd.read_excel(file_name)
 excel_row_count = len(df)
 
@@ -21,6 +21,7 @@ amplitude2_col = 'D'
 data2 = df[[time2_col, amplitude2_col]].sort_values(by=time2_col)
 data2['peak_number2'] = range(1, excel_row_count + 1)
 data2 = data2.reset_index(drop=True)
+
 
 # 2つのデータセットの時間が等しいのみを抽出
 merged_data = pd.merge(data1, data2, left_on=time1_col, right_on=time2_col, how='inner', suffixes=('_1', '_2'))
@@ -57,11 +58,14 @@ merged_data['ratio_Peak-Peak'] = np.where(
 )
 
 print(merged_data)
-cleaned_merged_data = merged_data.dropna()
+# cleaned_merged_data = merged_data.dropna()
 
 df2 = merged_data[['peak_number1', 'A', 'B', 'D']]
 df3 = merged_data[['continueNum', 'continueTime', '800nm', '940nm']]
 df4 = merged_data[['continueNum', 'continueTime', '800nm', '940nm', 'Peak_time_ave', '800nm_Peak-Peak', '940nm_Peak-Peak', 'ratio_Peak-Peak']]
+
+# df_rasio=merged_data[['Peak_time_ave','ratio_Peak-Peak']]+df[['OxyTime','Spo2']]
+df_rasio = pd.concat([merged_data[['Peak_time_ave','ratio_Peak-Peak']], df[['OxyTime','Spo2']]], axis=1)
 
 output_file_name = 'C:/Users/mpg/Desktop/python_rasio/change_date_rasio.xlsx'
 with pd.ExcelWriter(output_file_name) as writer:
@@ -70,13 +74,50 @@ with pd.ExcelWriter(output_file_name) as writer:
     df2.to_excel(writer, sheet_name='sameTimePeak')
     df3.to_excel(writer, sheet_name='continuePeak')
     df4.to_excel(writer, sheet_name='rasioPeak')
+    df_rasio.to_excel(writer, sheet_name='s')
     merged_data.to_excel(writer, sheet_name='Sheet1')
 
-plt.scatter(merged_data['Peak_time_ave'], merged_data['ratio_Peak-Peak'])
-plt.xlabel('time [s]')
-plt.ylabel('rasio (940nm/800nm)')
-plt.title('rasio & time with Ratios')
-plt.legend()
+# plt.scatter(merged_data['Peak_time_ave'], merged_data['ratio_Peak-Peak'])
+# plt.xlabel('time [s]')
+# plt.ylabel('rasio (940nm/800nm)')
+# plt.title('rasio & time with Ratios')
+# plt.legend()
 
-plt.savefig("C:/Users/mpg/Desktop/python_rasio/graph_image.png")
+# plt.savefig("C:/Users/mpg/Desktop/python_rasio/graph_image.png")
+# plt.show()
+
+def poly2(x, a, b, c):
+    return a*x**2 + b*x + c
+
+# NaNを除外したデータを用意する
+cleaned_data = merged_data.dropna(subset=['Peak_time_ave', 'ratio_Peak-Peak'])
+xdata = cleaned_data['Peak_time_ave']
+ydata = cleaned_data['ratio_Peak-Peak']
+
+# curve_fitを使用してパラメータを推定
+params, params_covariance = curve_fit(poly2, xdata, ydata)
+a, b, c = params
+print("Fitting Curve Equation: y = {:.10f}x² + {:.5f}x + {:.5f}".format(a, b, c))
+
+# 推定したパラメータを使ってフィッティングカーブをプロット
+plt.scatter(xdata, ydata, label='Data')
+
+# プロットの装飾
+plt.xlabel('Peak Time Average [s]')
+plt.ylabel('Ratio (940nm/800nm)')
+plt.title('plot')
+plt.legend()
+plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/plot.png")
+plt.title('Curve Fitting')
+plt.plot(xdata, poly2(xdata, *params), label="y = {:.6f}x² + {:.3f}x + {:.3f}".format(a, b, c), color='red')
+plt.legend()
+plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/rasio_time_fitting.png")
+plt.show()
+
+plt.xlabel('Time [s]')
+plt.ylabel('SpO2 [%]')
+plt.title('SpO2 fluctuation')
+plt.legend()
+plt.plot( df['OxyTime'], df['Spo2'],color='red')
+plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/spo2.png")
 plt.show()
