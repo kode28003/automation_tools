@@ -1,113 +1,172 @@
-import openpyxl
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import interpolate
-import scipy as sp
-from scipy import signal
-from scipy import fftpack
-from scipy.signal import butter, filtfilt
+from scipy.optimize import curve_fit
+
+##setting###
+file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' #Peakのファイル名
+
+heartRateAve = 15
+peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数
+movingAveragePoint=13       #波形全体に対する隣接平均のポイント数
+calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
+calibrationTimeStart=10     #キャリブレーション開始
+calibrationTimeEnd=40       #キャリブレーション終了時間
+slope_num=116.04            #推定式の傾き
+base_slope_num=117.56       #この実験のデータの傾き
+k = 1.5                     #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%
+min_hr = 35   # 下限 bpm
+max_hr = 220  # 上限 bpm
+##setting###
+
+df = pd.read_excel(file_name)
+excel_row_count = len(df)
+
+# 時間1と振幅1のデータ
+time1_col = 'A'
+amplitude1_col = 'B'
+data1 = df[[time1_col, amplitude1_col]].sort_values(by=time1_col)
+data1['peak_number1'] = range(1, excel_row_count + 1)
+data1 = data1.reset_index(drop=True)
+
+# 時間2と振幅2のデータ
+time2_col = 'C'
+amplitude2_col = 'D'
+data2 = df[[time2_col, amplitude2_col]].sort_values(by=time2_col)
+data2['peak_number2'] = range(1, excel_row_count + 1)
+data2 = data2.reset_index(drop=True)
+
+# ==========================================
+# ▼ 正のピークのみを抽出
+# ==========================================
+data1_pos = data1[data1[amplitude1_col] > 0].reset_index(drop=True)
+data2_pos = data2[data2[amplitude2_col] > 0].reset_index(drop=True)
+
+# ==========================================
+# ▼ 脈拍数（bpm）を算出
+# ==========================================
+data1_pos['peak_interval'] = data1_pos[time1_col].diff()
+data1_pos['heart_rate_bpm'] = 60 / data1_pos['peak_interval']
+
+data2_pos['peak_interval'] = data2_pos[time2_col].diff()
+data2_pos['heart_rate_bpm'] = 60 / data2_pos['peak_interval']
+
+# NaN除去
+data1_hr = data1_pos.dropna(subset=['heart_rate_bpm']).reset_index(drop=True)
+data2_hr = data2_pos.dropna(subset=['heart_rate_bpm']).reset_index(drop=True)
 
 
-def get_last_row_with_data(sheet):
-    max_row = sheet.max_row
-    for row in range(max_row, 0, -1):
-        cell_value = sheet.cell(row=row, column=3).value
-        if cell_value is not None and cell_value != "":
-            print("最終行の値は、"+str(row))
-            print("最終行の数は、"+str(cell_value))
-            return row
-    return None
+# ==========================================
+# ▼ 人間の脈波としてありえない値を除去（HRの範囲チェック）
+# ==========================================
 
-def find_nearest_larger_value(dateNumber):
-    two_exponentiation=[256,512,1024,2048,4096,8192,16384,32768,65536,131072,262144,524288]
-    nearest_larger_num = float('inf')  # 正の無限大で初期化
-    for num in two_exponentiation:
-        if dateNumber < num < nearest_larger_num:
-            nearest_larger_num = num
-    return nearest_larger_num
+data1_hr = data1_hr[
+    (data1_hr['heart_rate_bpm'] >= min_hr) &
+    (data1_hr['heart_rate_bpm'] <= max_hr)
+].reset_index(drop=True)
 
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyquist = 0.5 * fs
-    low = lowcut / nyquist
-    high = highcut / nyquist
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
+data2_hr = data2_hr[
+    (data2_hr['heart_rate_bpm'] >= min_hr) &
+    (data2_hr['heart_rate_bpm'] <= max_hr)
+].reset_index(drop=True)
 
-def bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    filtered_data = filtfilt(b, a, data)
-    return filtered_data
+# ==========================================
+# ▼ スムージング（移動平均）
+# ==========================================
+data1_hr['heart_rate_bpm_smooth'] = data1_hr['heart_rate_bpm'].rolling(window=heartRateAve).mean()
+data2_hr['heart_rate_bpm_smooth'] = data2_hr['heart_rate_bpm'].rolling(window=heartRateAve).mean()
 
-x_values = []
-y_values = []
-
-file_path = 'C:/Users/mpg/Desktop/python_excel/test.xlsx'
-interpolate_num = 256 #補間の初期値
-
-workbook = openpyxl.load_workbook(file_path)
-sheet = workbook.active
-
-dateNum=get_last_row_with_data(sheet)
-interpolate_num=find_nearest_larger_value(dateNum)
-print("1番近いかつ大きな2の累乗は、↓")
-print(interpolate_num)
-
-for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row, min_col=3, max_col=4):#列3と列4を指定
-    x_values.append(row[0].value)  # 3列目の値をx軸に
-    y_values.append(row[1].value)  # 4列目の値をy軸に
-
-myfunc = sp.interpolate.interp1d(x_values, y_values)
-x_new = np.linspace(min(x_values), max(x_values), interpolate_num)#まず、xを2の累乗に補間
-
-fs = 1 / (x_new[1] - x_new[0])  # サンプリング周波数 (Hz)
-lowcut = 0.75  # 0.75Hz以下の周波数をカット
-highcut = 2.5  # 2.5Hz以上の周波数をカット
-filtered_data = bandpass_filter(myfunc(x_new), lowcut, highcut, fs, order=6)
-
+# ==========================================
+# ▼ 折れ線グラフ（横軸＝時間）
+# ==========================================
 plt.figure(figsize=(10, 6))
 
-plt.plot(x_new, myfunc(x_new), 'b-', label='Original Data')
-plt.xlabel('Time [s]')
-plt.ylabel('Amplitude')
+
+# スムージング後（折れ線）
+plt.plot(data1_hr[time1_col], data1_hr['heart_rate_bpm_smooth'],
+         color='red', label='760nm', linewidth=3)
+plt.plot(data2_hr[time2_col], data2_hr['heart_rate_bpm_smooth'],
+         color='green', label='940nm', linewidth=3)
+
+# 3. HR（青・そのまま）
+plt.plot(df['OxyTime'], df['HR'], color='blue', label='HR (bpm)', linewidth=3)
+
+# ←★横軸を「時間 [s]」に変更
+plt.xlabel('Time [s]', fontsize=16)
+plt.ylabel('Heart Rate [bpm]', fontsize=16)
+plt.xlim(0, 540)
+plt.ylim(50, 115)
+plt.title('Heart Rate', fontsize=14)
 plt.legend()
-plt.grid(True)
+plt.tight_layout()
+plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/comp_HR.png")  # 画像を保存
 plt.show()
 
 
-# plt.plot(x_new, filtered_data, 'r-', linewidth=2, label='Filtered Data')
-# plt.xlabel('Time [s]')
-# plt.ylabel('Amplitude')
-# plt.legend()
-# plt.grid(True)
-# plt.xlim(40, 60)
-# plt.ylim(-1, 1)
-# plt.tight_layout()
-# plt.show()
+# ==========================================
+# ▼ Excel出力用データ統合
+# ==========================================
+
+# --- 760nmデータ ---
+merged_data1 = pd.merge(
+    data1,
+    data1_hr[[time1_col, 'heart_rate_bpm', 'heart_rate_bpm_smooth']],
+    on=time1_col,
+    how='left'
+)
+merged_data1.rename(columns={
+    amplitude1_col: 'Amplitude',
+    time1_col: 'Time [s]',
+    'heart_rate_bpm': 'HeartRate[bpm]',
+    'heart_rate_bpm_smooth': f'Smoothed({heartRateAve}-pt)'
+}, inplace=True)
+
+# --- 940nmデータ ---
+merged_data2 = pd.merge(
+    data2,
+    data2_hr[[time2_col, 'heart_rate_bpm', 'heart_rate_bpm_smooth']],
+    on=time2_col,
+    how='left'
+)
+merged_data2.rename(columns={
+    amplitude2_col: 'Amplitude',
+    time2_col: 'Time [s]',
+    'heart_rate_bpm': 'HeartRate[bpm]',
+    'heart_rate_bpm_smooth': f'Smoothed({heartRateAve}-pt)'
+}, inplace=True)
+# ==========================================
+# ▼ Excel出力用データ統合（波長ごと・正ピークのみ）
+# ==========================================
+
+# --- 760nm（data1_hr） ---
+hr_pos_760 = data1_hr[[time1_col, 'heart_rate_bpm', 'heart_rate_bpm_smooth']].copy()
+hr_pos_760.rename(columns={
+    time1_col: 'Time [s]',
+    'heart_rate_bpm': 'HeartRate[bpm]',
+    'heart_rate_bpm_smooth': f'Smoothed({heartRateAve}-pt)'
+}, inplace=True)
+
+# 時間で並び替え
+hr_pos_760 = hr_pos_760.sort_values('Time [s]').reset_index(drop=True)
 
 
-x_peaks = [x_new[i] for i in range(1, len(x_new)-1) if filtered_data[i] > 0 and filtered_data[i] > filtered_data[i-1] and filtered_data[i] > filtered_data[i+1]]
-y_peaks = [filtered_data[i] for i in range(1, len(filtered_data)-1) if filtered_data[i] > 0 and filtered_data[i] > filtered_data[i-1] and filtered_data[i] > filtered_data[i+1]]
+# --- 940nm（data2_hr） ---
+hr_pos_940 = data2_hr[[time2_col, 'heart_rate_bpm', 'heart_rate_bpm_smooth']].copy()
+hr_pos_940.rename(columns={
+    time2_col: 'Time [s]',
+    'heart_rate_bpm': 'HeartRate[bpm]',
+    'heart_rate_bpm_smooth': f'Smoothed({heartRateAve}-pt)'
+}, inplace=True)
+
+# 時間で並び替え
+hr_pos_940 = hr_pos_940.sort_values('Time [s]').reset_index(drop=True)
 
 
-heart_rate_x = x_peaks
-heart_rate_y = [abs(60/(x_peaks[i+1] - x_peaks[i]) ) for i in range(len(x_peaks) - 1)]
-heart_rate_y.append(abs(60 / (x_peaks[-1] - x_peaks[-2])))
-
-# プロット
-plt.plot(x_new, filtered_data, 'r-', linewidth=2, label='Filtered Data')
-plt.plot(x_peaks, y_peaks, marker='o', linestyle='', label='peak', color='blue')
-plt.xlabel('Time [s]')
-plt.ylabel('Amplitude')
-plt.legend()
-plt.grid(True)
-plt.xlim(40, 60)
-plt.ylim(-1, 1)
-plt.show()
-
-
-plt.plot(heart_rate_x, heart_rate_y, marker='o',linewidth=2, label='HR')
-plt.xlabel('Time [s]')
-plt.ylabel('HR')
-plt.legend()
-plt.grid(True)
-plt.show()
+output_path = 'C:/Users/mpg/Desktop/python_rasio/heart_rate_result.xlsx'
+with pd.ExcelWriter(output_path) as writer:
+    merged_data1.to_excel(writer, sheet_name='Wavelength_760nm', index=False)
+    merged_data2.to_excel(writer, sheet_name='Wavelength_940nm', index=False)
+    hr_pos_760.to_excel(writer, sheet_name='HR_Positive_760nm', index=False)
+    hr_pos_940.to_excel(writer, sheet_name='HR_Positive_940nm', index=False)
+    
+print(f"結果をExcelに保存しました: {output_path}")
