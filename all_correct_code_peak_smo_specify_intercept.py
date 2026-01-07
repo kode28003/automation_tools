@@ -15,10 +15,10 @@ movingAveragePoint=13       #波形全体に対する隣接平均のポイント
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
 calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
 calibrationTimeEnd=100      #キャリブレーション終了時間 (defalult:40)
-slope_num=116.04            #推定式の傾き
-intercept=-30               #事前キャリブレーションによる切片
+slope_num=116            #推定式の傾き
+intercept=-70.68              #事前キャリブレーションによる切片
 base_slope_num=139.51       #この実験のデータの傾き
-k = 1.5                     #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
+k = 2                    #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数
 min_hr = 35                 #脈拍数の下限 (bpm)
 max_hr = 220                #脈拍数の上限 (bpm)
@@ -255,7 +255,7 @@ print(f"結果をExcelに保存しました: {output_path}")
 for i, row1 in data1.iterrows():
     for j, row2 in data2.iterrows():
         # time1_col と time2_col の差の絶対値が 0.025 未満の場合 < 0.025:
-        if abs(row1[time1_col] - row2[time2_col]) < 0.030:
+        if abs(row1[time1_col] - row2[time2_col]) < 0.070:
             merged_row = pd.DataFrame([row1.tolist() + row2.tolist()])
             merged_data = pd.concat([merged_data, merged_row], ignore_index=True)
 
@@ -451,7 +451,7 @@ print(f"1.5SDによる幅: {width:.2f}")
 ##
 ##
 ##
-def calc_spo2_ratio_range(slope, intercept, delta_R, spo2_min=75, spo2_max=96):
+def calc_spo2_ratio_range(slope, intercept, delta_R, spo2_min=75, spo2_max=100):
     results = []
     spo2_values = np.arange(spo2_max, spo2_min - 1, -1)
     for spo2 in spo2_values:
@@ -489,8 +489,6 @@ def plot_ratio_and_spo2(df,name):
     df['ratio_Peak-Peak_MA'] = df['ratio_Peak-Peak'].rolling(window=movingAveragePoint).mean()
     ax1.plot(df['Peak_time_ave'], df['ratio_Peak-Peak_MA'], color=color1, label='ratio')
     ax1.tick_params(axis='y', labelcolor=color1,labelsize=14)
-    ax1.set_ylim(0.95, 1.25)
-    #ax1.set_ylim(0.95, 1.55)
     ax2 = ax1.twinx()  # 2つ目の縦軸を作成
     color2 = 'tab:blue'
     ax2.set_ylabel('Spo2', color=color2 ,fontsize=16)
@@ -520,8 +518,6 @@ def plot_ratio_and_spo2_nocut(df,name):
     df['ratio_Peak-Peak_MA'] = df['ratio_Peak-Peak']
     ax1.plot(df['Peak_time_ave'], df['ratio_Peak-Peak_MA'], color=color1, label='ratio')
     ax1.tick_params(axis='y', labelcolor=color1,labelsize=14)
-    ax1.set_ylim(0.95, 1.25)
-    #ax1.set_ylim(0.95, 1.55)
     ax2 = ax1.twinx()  # 2つ目の縦軸を作成
     color2 = 'tab:blue'
     ax2.set_ylabel('Spo2', color=color2 ,fontsize=16)
@@ -598,16 +594,30 @@ for i in range(len(df_rasio_int)):
             })
             # ===== SpO₂ごとの上限・下限を取得 =====
             # SpO₂に最も近い結果を検索
-            matched_row = min(results, key=lambda x: abs(x["SpO2"] - spo2))
-            upper_limit = matched_row["R_upper"]
-            lower_limit = matched_row["R_lower"]
-            # ===== 除外条件 =====
-            if 97 <= spo2 <= 100:
-                if ratio < lower_limit or ratio > upper_limit:
-                    continue
-            elif ratio < lower_limit or ratio > upper_limit:
+            # matched_row = min(results, key=lambda x: abs(x["SpO2"] - spo2))
+            # upper_limit = matched_row["R_upper"]
+            # lower_limit = matched_row["R_lower"]
+            # # ===== 除外条件 =====
+            # if 97 <= spo2 <= 100 and (ratio < lower_limit_mad or ratio > upper_limit_mad):
+            #     continue
+
+            # new_data_dyn.append({
+            #     'Peak_time_ave': df_rasio_int.at[i, 'Peak_time_ave'],
+            #     'ratio_Peak-Peak': ratio,
+            #     'Spo2': spo2
+            # })
+            R_center = (spo2 - intercept) / slope_num
+            lower_limit = R_center - width / 2
+            upper_limit = R_center + width / 2
+            spo2_est = slope_num * ratio + intercept
+            residual = spo2 - spo2_est
+
+            # R幅 width を SpO₂空間に変換
+            delta_spo2 = abs(slope_num) * width / 2
+
+            if abs(residual) > delta_spo2:
                 continue
-            # 条件を通過したデータを保存
+
             new_data_dyn.append({
                 'Peak_time_ave': df_rasio_int.at[i, 'Peak_time_ave'],
                 'ratio_Peak-Peak': ratio,
