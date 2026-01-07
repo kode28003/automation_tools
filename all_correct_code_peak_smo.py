@@ -11,13 +11,13 @@ from scipy.optimize import curve_fit
 file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' #Peakのファイル名
 
 peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数 (default:3)
-movingAveragePoint=20       #波形全体に対する隣接平均のポイント数 (default:30)
+movingAveragePoint=15        #波形全体に対する隣接平均のポイント数 (default:30)
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
-calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
-calibrationTimeEnd=100      #キャリブレーション終了時間 (defalult:40)
-slope_num=116.04            #推定式の傾き
+calibrationTimeStart=30     #キャリブレーション開始 (defalult:10)
+calibrationTimeEnd=80      #キャリブレーション終了時間 (defalult:40)
+slope_num=116               #推定式の傾き
 base_slope_num=150          #この実験のデータの傾き
-k = 2                    #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
+k = 2                       #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数
 min_hr = 35                 #脈拍数の下限 (bpm)
 max_hr = 220                #脈拍数の上限 (bpm)
@@ -201,12 +201,12 @@ print(f"940nm 精密度: ±{precision_940:.2f} [bpm]")
 
 plt.figure(figsize=(10, 6))
 plt.plot(data1_hr[time1_col], data1_hr['heart_rate_bpm_smooth'], color='red', label='760nm', linewidth=3)
-plt.plot(data2_hr[time2_col], data2_hr['heart_rate_bpm_smooth'], color='green', label='940nm', linewidth=3)
+plt.plot(data2_hr[time2_col], data2_hr['heart_rate_bpm_smooth'], color='green', label='830nm', linewidth=3)
 plt.plot(df['OxyTime'], df['HR'], color='blue', label='HR (bpm)', linewidth=3)
 # y=101 と y=99 に2行で表示（位置を少しずらす）
 plt.text(10, 110, f'Precision_760nm = ±{precision_760:.2f}[bpm]', 
          fontsize=16, color='red')
-plt.text(10, 105, f'Precision_940nm = ±{precision_940:.2f}[bpm]', 
+plt.text(10, 105, f'Precision_830nm = ±{precision_940:.2f}[bpm]', 
          fontsize=16, color='green')
 plt.xlabel('Time [s]', fontsize=16)
 plt.ylabel('Heart Rate [bpm]', fontsize=16)
@@ -288,32 +288,7 @@ merged_data = merged_data.sort_values('continueTime').reset_index(drop=True)
 # 連続する'continueNum'の組み合わせを特定
 continuous_combinations = [(merged_data['continueNum'].iloc[i], merged_data['continueNum'].iloc[i+1]) for i in range(len(merged_data) - 1) if merged_data['continueNum'].iloc[i+1] - merged_data['continueNum'].iloc[i] == 1]
 
-# merged_data['Peak_time_ave'] = np.nan
-# for num1, num2 in continuous_combinations:
-#     merged_data.loc[(merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2), 'Peak_time_ave'] = (merged_data['continueTime'] + merged_data['continueTime'].shift(-1)) / 2
 
-
-# # === スムージング後の値でPeak-Peak計算 === 🟩【変更点】
-# merged_data['800nm_Peak-Peak'] = np.nan
-# merged_data['940nm_Peak-Peak'] = np.nan
-
-# for num1, num2 in continuous_combinations:
-#     merged_data.loc[
-#         (merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2),
-#         '800nm_Peak-Peak'
-#     ] = abs(merged_data['800nm_smooth'].shift(-1)) + abs(merged_data['800nm_smooth'])
-
-#     merged_data.loc[
-#         (merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2),
-#         '940nm_Peak-Peak'
-#     ] = abs(merged_data['940nm_smooth'].shift(-1)) + abs(merged_data['940nm_smooth'])
-
-# # === 比率計算（スムージング後） === 🟩【変更点】
-# merged_data['ratio_Peak-Peak'] = np.where(
-#     merged_data['800nm_Peak-Peak'] != 0,
-#     merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak'],
-#     np.nan
-# )
 
 # Peak-time-ave と Peak-Peak を計算
 merged_data['Peak_time_ave'] = np.nan
@@ -471,11 +446,13 @@ print(f"10〜40秒のratio中央値:{ratio_median:.2f}")
 print(f"lower_limit_mad(中央値-{k}*MAD*1.48): {lower_limit_mad:.2f}")
 print(f"upper_limit_mad(中央値+{k}*MAD*1.48): {upper_limit_mad:.2f}")
 print(f"1.5SDによる幅: {width:.2f}")
+# if width<=2.0:
+#     width=2.09
 ##
 ##
 ##
 ##
-def calc_spo2_ratio_range(slope, intercept, delta_R, spo2_min=75, spo2_max=96):
+def calc_spo2_ratio_range(slope, intercept, delta_R, spo2_min=75, spo2_max=100):
     results = []
     spo2_values = np.arange(spo2_max, spo2_min - 1, -1)
     for spo2 in spo2_values:
@@ -590,16 +567,16 @@ new_df["Spo2_int"] = np.floor(new_df["Spo2"]).astype(int)
 sample_counts = new_df.groupby("Spo2_int").size().reset_index(name="n_samples")
 sample_counts["weight"] = np.sqrt(sample_counts["n_samples"])
 new_df_include_sample_num = new_df.merge(sample_counts, on="Spo2_int", how="left")
-subset_10_40 = new_df[(new_df['Peak_time_ave'] >= calibrationTimeStart) & (new_df['Peak_time_ave'] <= calibrationTimeEnd)].copy()
-subset_10_40['b'] = subset_10_40['Spo2'] - slope_num * subset_10_40['ratio_Peak-Peak']
-
-
-# 切片bの中央値
-b_median = subset_10_40['b'].median()
+subset_10_40 = new_df[
+    (new_df['Peak_time_ave'] >= calibrationTimeStart) &
+    (new_df['Peak_time_ave'] <= calibrationTimeEnd)
+].copy()
+spo2_median  = subset_10_40['Spo2'].median()
+ratio_median = subset_10_40['ratio_Peak-Peak'].median()
+b_median = spo2_median - slope_num * ratio_median
 print(" ")
 print(f"10〜40秒の切片中央値 b: {b_median:.2f}")
 print(f"キャリブレーション後の近似式: SpO2 = {slope_num:.2f} * ratio + {b_median:.2f}")
-
 
 results = calc_spo2_ratio_range(slope_num, b_median, width)
 new_data_dyn = []      # フィルタ後データ（動的上限下限）
@@ -618,16 +595,21 @@ for i in range(len(df_rasio_int)):
             })
             # ===== SpO₂ごとの上限・下限を取得 =====
             # SpO₂に最も近い結果を検索
-            matched_row = min(results, key=lambda x: abs(x["SpO2"] - spo2))
-            upper_limit = matched_row["R_upper"]
-            lower_limit = matched_row["R_lower"]
-            # ===== 除外条件 =====
-            if 97 <= spo2 <= 100:
-                if ratio < lower_limit or ratio > upper_limit:
-                    continue
-            elif ratio < lower_limit or ratio > upper_limit:
+            # matched_row = min(results, key=lambda x: abs(x["SpO2"] - spo2))
+            # upper_limit = matched_row["R_upper"]
+            # lower_limit = matched_row["R_lower"]
+            R_center = (spo2 - b_median) / slope_num
+            lower_limit = R_center - width / 2
+            upper_limit = R_center + width / 2
+            spo2_est = slope_num * ratio + b_median
+            residual = spo2 - spo2_est
+
+            # R幅 width を SpO₂空間に変換
+            delta_spo2 = abs(slope_num) * width / 2
+
+            if abs(residual) > delta_spo2:
                 continue
-            # 条件を通過したデータを保存
+
             new_data_dyn.append({
                 'Peak_time_ave': df_rasio_int.at[i, 'Peak_time_ave'],
                 'ratio_Peak-Peak': ratio,
@@ -640,18 +622,21 @@ df_new_cutted["Spo2_int"] = np.floor(df_new_cutted["Spo2"]).astype(int)
 sample_counts = df_new_cutted.groupby("Spo2_int").size().reset_index(name="n_samples")
 sample_counts["weight"] = np.sqrt(sample_counts["n_samples"])
 new_df_include_sample_num_cutted = df_new_cutted.merge(sample_counts, on="Spo2_int", how="left")
-subset_10_40_cutted = df_new_cutted[(df_new_cutted['Peak_time_ave'] >= calibrationTimeStart) & (df_new_cutted['Peak_time_ave'] <= calibrationTimeEnd)].copy()
-subset_10_40_cutted['b'] = subset_10_40_cutted['Spo2'] - base_slope_num * subset_10_40_cutted['ratio_Peak-Peak']
+subset_10_40_cutted = df_new_cutted[
+    (df_new_cutted['Peak_time_ave'] >= calibrationTimeStart) &
+    (df_new_cutted['Peak_time_ave'] <= calibrationTimeEnd)
+].copy()
+spo2_median  = subset_10_40_cutted['Spo2'].median()
+ratio_median = subset_10_40_cutted['ratio_Peak-Peak'].median()
+cutted_median = spo2_median - base_slope_num * ratio_median
+print(f"slope b: {b_median:.2f}")
 ##
 ##
 ##
-
-
 ##
 ##
 ##
 # 切片bの中央値
-cutted_median = subset_10_40_cutted['b'].median()
 print(" ")
 print(f"10〜40秒の切片中央値 cutted b: {cutted_median:.2f}")
 print(f"キャリブレーション後の近似式 cutted: SpO2 = {base_slope_num:.2f} * ratio + {cutted_median:.2f}")

@@ -72,22 +72,84 @@ merged_data = merged_data.dropna(subset=['Peak_time_ave', 'ratio_Peak-Peak'])
 
 df.reset_index(drop=True, inplace=True)
 merged_data.reset_index(drop=True, inplace=True)
+
 df_rasio = pd.concat([merged_data[['Peak_time_ave', 'ratio_Peak-Peak']], df[['OxyTime', 'Spo2']]], axis=1)
-
-
 df_rasio_int = df_rasio.copy()
 df_rasio_int['Peak_time_ave'] = df_rasio_int['Peak_time_ave'].dropna().replace([np.inf, -np.inf], np.nan).astype(float).astype(int)
+########
+#######
+#######
+#
+# === 正のピーク・負のピークを分類 ===  ←🟩【追加】
+merged_data['peak_type'] = np.where(merged_data['800nm'] >= 0, 'positive', 'negative')
+positive_peaks = merged_data[merged_data['peak_type'] == 'positive'].copy()
+negative_peaks = merged_data[merged_data['peak_type'] == 'negative'].copy()
+
+# === 隣接平均によるスムージング ===  ←🟩【変更済み】
+window_size = 10  # 平滑化の窓サイズ（必要に応じて調整）
+
+positive_peaks['800nm_smooth'] = positive_peaks['800nm'].rolling(window=window_size).mean()
+positive_peaks['940nm_smooth'] = positive_peaks['940nm'].rolling(window=window_size).mean()
+negative_peaks['800nm_smooth'] = negative_peaks['800nm'].rolling(window=window_size).mean()
+negative_peaks['940nm_smooth'] = negative_peaks['940nm'].rolling(window=window_size).mean()
+
+# === 正負ピークを1つのDataFrameに結合 ===  ←🟩【追加】
+smoothed_df = pd.concat([positive_peaks, negative_peaks], ignore_index=True)
+
+# 時間順に並び替え（必要に応じて）
+if 'continueTime' in smoothed_df.columns:
+    smoothed_df = smoothed_df.sort_values('continueTime').reset_index(drop=True)
+
+
+
+# === 結果のプロット ===  ←🟩【追加】
+plt.figure(figsize=(10, 6))
+
+# 800nm波形（正と負）
+plt.plot(positive_peaks['continueTime'], positive_peaks['800nm'], 'r.', alpha=0.4, label='760nm positive')
+plt.plot(positive_peaks['continueTime'], positive_peaks['800nm_smooth'], 'r-', label='760nm positive (smooth)')
+plt.plot(negative_peaks['continueTime'], negative_peaks['800nm'], 'b.', alpha=0.4, label='760nm negative')
+plt.plot(negative_peaks['continueTime'], negative_peaks['800nm_smooth'], 'b-', label='760nm negative (smooth)')
+
+plt.xlabel('Time')
+plt.ylabel('Amplitude (760nm)')
+plt.xlim(0, 540)                      # x軸の範囲を0〜5に
+plt.ylim(-0.001, 0.001)   
+plt.legend()
+plt.title('Positive/Negative Peak Smoothing (760nm)')
+plt.grid(True)
+plt.show()
+
+# === 結果のプロット ===  ←🟩【追加】
+plt.figure(figsize=(10, 6))
+
+# 800nm波形（正と負）
+plt.plot(positive_peaks['continueTime'], positive_peaks['940nm'], 'r.', alpha=0.4, label='940nm positive')
+plt.plot(positive_peaks['continueTime'], positive_peaks['940nm_smooth'], 'r-', label='940nm positive (smooth)')
+plt.plot(negative_peaks['continueTime'], negative_peaks['940nm'], 'b.', alpha=0.4, label='940nm negative')
+plt.plot(negative_peaks['continueTime'], negative_peaks['940nm_smooth'], 'b-', label='940nm negative (smooth)')
+
+plt.xlabel('Time')
+plt.ylabel('Amplitude (940nm)')
+plt.xlim(0, 540)                      # x軸の範囲を0〜5に
+plt.ylim(-0.001, 0.001)   
+plt.legend()
+plt.title('Positive/Negative Peak Smoothing (940nm)')
+plt.grid(True)
+plt.show()
+
+
 ##
 ##
 ##
 ##setting###
-movingAveragePoint=30 #隣接平均のポイント数 (default:30)
+movingAveragePoint=13 #隣接平均のポイント数 (default:30)
 
-calibrationAveragePoint=13
+calibrationAveragePoint=10
 calibrationTimeStart=10 #キャリブレーション開始 (defalult:10)
 calibrationTimeEnd=40 #キャリブレーション終了時間 (defalult:40)
 slope_num=116.04 #推定式の傾き
-base_slope_num=110.47 #この実験のデータの傾き
+base_slope_num=111.41 #この実験のデータの傾き
 k = 1.5       #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲
 ##setting###
 ##
@@ -137,7 +199,7 @@ print(f"10〜40秒のratio中央値:{ratio_median:.2f}")
 print(f"lower_limit_mad(中央値-{k}*MAD*1.48): {lower_limit_mad:.2f}")
 print(f"upper_limit_mad(中央値+{k}*MAD*1.48): {upper_limit_mad:.2f}")
 print(f"1.5SDによる幅: {width:.2f}")
-
+##
 ##
 ##
 ##
@@ -165,7 +227,7 @@ def calc_spo2_ratio_range(slope, intercept, delta_R, spo2_min=75, spo2_max=96):
 ##
 ##
 ##
-
+##
 # 新しいデータフレームを格納するためのリスト
 new_data = []
 all_new_data=[]
@@ -246,7 +308,7 @@ subset_10_40['b'] = subset_10_40['Spo2'] - slope_num * subset_10_40['ratio_Peak-
 b_median = subset_10_40['b'].median()
 print(" ")
 print(f"10〜40秒の切片中央値 b: {b_median:.2f}")
-print(f"キャリブレーション後の近似式: SpO2 = {slope_num:.2f} * ratio + {b_median:.2f}")
+print(f"推定式基準のキャリブレーション後の近似式: SpO2 = {slope_num:.2f} * ratio + {b_median:.2f}")
 
 ##
 ##
@@ -310,7 +372,7 @@ subset_10_40_cutted['b'] = subset_10_40_cutted['Spo2'] - base_slope_num * subset
 cutted_median = subset_10_40_cutted['b'].median()
 print(" ")
 print(f"10〜40秒の切片中央値 cutted b: {cutted_median:.2f}")
-print(f"キャリブレーション後の近似式 cutted: SpO2 = {base_slope_num:.2f} * ratio + {cutted_median:.2f}")
+print(f"このデータ基準のキャリブレーション後の近似式 cutted: SpO2 = {base_slope_num:.2f} * ratio + {cutted_median:.2f}")
 ##
 ##
 ##
@@ -320,7 +382,6 @@ plot_ratio_and_spo2(df_new_cutted,"upper_lowwer")
 n_alls = len(df_all_cutted)
 n_news = len(df_new_cutted)
 diff = n_alls - n_news  # 除外された件数
-# plt.figure(figsize=(8,6))
 plt.scatter(df_all_cutted['ratio_Peak-Peak'], df_all_cutted['Spo2'], 
             label=f'raw data (cutted: {diff} points)', 
             color='lightgray', alpha=0.7)
