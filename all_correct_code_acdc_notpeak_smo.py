@@ -11,12 +11,12 @@ from scipy.optimize import curve_fit
 file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' 
 
 peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数 (default:3)
-movingAveragePoint=20       #波形全体に対する隣接平均のポイント数 (default:30)
+movingAveragePoint=13       #波形全体に対する隣接平均のポイント数 (default:30)
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
-calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
-calibrationTimeEnd=100       #キャリブレーション終了時間 (defalult:40)
-slope_num=180         #推定式の傾き
-base_slope_num=252.94    #この実験のデータの傾き
+calibrationTimeStart=20     #キャリブレーション開始 (defalult:10)
+calibrationTimeEnd=50       #キャリブレーション終了時間 (defalult:40)
+slope_num=355.42           #推定式の傾き
+base_slope_num=324.62     #この実験のデータの傾き
 k = 2                     #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数
 min_hr = 35                 #脈拍数の下限 (bpm)
@@ -220,14 +220,9 @@ plt.tight_layout()
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/comp_HR.png")
 plt.show()
 
-##
-##
-##
 # ==========================================
 # ▼ Excel出力
 # ==========================================
-
-    
 output_path = 'C:/Users/mpg/Desktop/python_rasio/result_heart_rate.xlsx'
 with pd.ExcelWriter(output_path) as writer:
     merged_data1.to_excel(writer, sheet_name='Wavelength_760nm', index=False)
@@ -254,7 +249,7 @@ print(f"結果をExcelに保存しました: {output_path}")
 for i, row1 in data1.iterrows():
     for j, row2 in data2.iterrows():
         # time1_col と time2_col の差の絶対値が 0.025 未満の場合 < 0.025:
-        if abs(row1[time1_col] - row2[time2_col]) < 0.070:
+        if abs(row1[time1_col] - row2[time2_col]) < 0.030:
             merged_row = pd.DataFrame([row1.tolist() + row2.tolist()])
             merged_data = pd.concat([merged_data, merged_row], ignore_index=True)
 
@@ -277,8 +272,10 @@ negative_peaks = merged_data[merged_data['peak_type'] == 'negative'].copy()
 
 # === スムージング（隣接平均） === 🟩【追加】
 for df_sub in [positive_peaks, negative_peaks]:
-    df_sub['800nm_smooth'] = df_sub['800nm'].rolling(window=peakAveragePoint).mean()
-    df_sub['940nm_smooth'] = df_sub['940nm'].rolling(window=peakAveragePoint).mean()
+    # df_sub['800nm_smooth'] = df_sub['800nm'].rolling(window=peakAveragePoint).mean()
+    # df_sub['940nm_smooth'] = df_sub['940nm'].rolling(window=peakAveragePoint).mean()
+    df_sub['800nm_smooth'] = df_sub['800nm']
+    df_sub['940nm_smooth'] = df_sub['940nm']
 
 # === スムージング後データを統合 === 🟩【追加】
 merged_data = pd.concat([positive_peaks, negative_peaks], ignore_index=True)
@@ -314,10 +311,9 @@ merged_data['ratio_Peak-Peak'] = np.where(
     merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak'],
     np.nan
 )
-
 ###
 ###
-##
+###
 dc_df = pd.read_excel(
     file_name, 
     usecols=['time760nm', 'dc760nm', 'time940nm', 'dc940nm']
@@ -350,12 +346,12 @@ merged_data = pd.merge(
 )
 
 # === 比率計算（スムージング後 + DC成分） === 🟩【変更点】
-# merged_data['ratio_Peak-Peak_ACDC'] = (merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak']) *(merged_data['dc760nm'] / merged_data['dc940nm'])
 merged_data['ratio_Peak-Peak'] = np.where(
     (merged_data['800nm_Peak-Peak'] != 0) & (merged_data['dc940nm'] != 0),
     (merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak'])*(merged_data['dc760nm'] / merged_data['dc940nm']),
     np.nan
 )
+merged_data['ratio_Peak-Peak'] = merged_data['ratio_Peak-Peak'].rolling(window=peakAveragePoint).mean()
 ###
 ###
 ###

@@ -13,9 +13,9 @@ file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' #Peakのファイル�
 peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数 (default:3)
 movingAveragePoint=15        #波形全体に対する隣接平均のポイント数 (default:30)
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
-calibrationTimeStart=30     #キャリブレーション開始 (defalult:10)
-calibrationTimeEnd=80      #キャリブレーション終了時間 (defalult:40)
-slope_num=116               #推定式の傾き
+calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
+calibrationTimeEnd=100      #キャリブレーション終了時間 (defalult:40)
+slope_num=107               #推定式の傾き
 base_slope_num=150          #この実験のデータの傾き
 k = 2                       #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数

@@ -195,7 +195,7 @@ hr_pos_940.drop(columns=['sec'], inplace=True)
 # ==========================================
 # ▼ Excel出力
 # ==========================================
-output_path = 'C:/Users/mpg/Desktop/python_rasio/heart_rate_result.xlsx'
+output_path = 'C:/Users/mpg/Desktop/python_rasio/result_heart_rate.xlsx'
 with pd.ExcelWriter(output_path) as writer:
     merged_data1.to_excel(writer, sheet_name='Wavelength_760nm', index=False)
     merged_data2.to_excel(writer, sheet_name='Wavelength_940nm', index=False)

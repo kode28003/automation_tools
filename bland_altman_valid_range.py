@@ -5,7 +5,7 @@ input_path = r"C:\Users\mpg\Desktop\python_rasio\Bland-Altman_analysis_spo2.xlsx
 df = pd.read_excel(input_path)
 
 # 閾値
-oxy_threshold = 90
+oxy_threshold = 95
 
 # OxyTrue >= 95 の行を削除（体裁は維持）
 df_filtered = df[df["OxyTrue"] < oxy_threshold]

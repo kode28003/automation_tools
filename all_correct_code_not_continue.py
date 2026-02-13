@@ -8,16 +8,16 @@ from scipy.optimize import curve_fit
 ##
 ##
 ##setting###
-file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' 
+file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' #Peakのファイル名
 
 peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数 (default:3)
-movingAveragePoint=20       #波形全体に対する隣接平均のポイント数 (default:30)
+movingAveragePoint=13        #波形全体に対する隣接平均のポイント数 (default:30)
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
-calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
-calibrationTimeEnd=100       #キャリブレーション終了時間 (defalult:40)
-slope_num=180         #推定式の傾き
-base_slope_num=252.94    #この実験のデータの傾き
-k = 2                     #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
+calibrationTimeStart=30     #キャリブレーション開始 (defalult:10)
+calibrationTimeEnd=60       #キャリブレーション終了時間 (defalult:40)
+slope_num=116.04            #推定式の傾き
+base_slope_num=150          #この実験のデータの傾き
+k = 1.5                       #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数
 min_hr = 35                 #脈拍数の下限 (bpm)
 max_hr = 220                #脈拍数の上限 (bpm)
@@ -254,7 +254,7 @@ print(f"結果をExcelに保存しました: {output_path}")
 for i, row1 in data1.iterrows():
     for j, row2 in data2.iterrows():
         # time1_col と time2_col の差の絶対値が 0.025 未満の場合 < 0.025:
-        if abs(row1[time1_col] - row2[time2_col]) < 0.070:
+        if abs(row1[time1_col] - row2[time2_col]) < 0.030:
             merged_row = pd.DataFrame([row1.tolist() + row2.tolist()])
             merged_data = pd.concat([merged_data, merged_row], ignore_index=True)
 
@@ -277,8 +277,8 @@ negative_peaks = merged_data[merged_data['peak_type'] == 'negative'].copy()
 
 # === スムージング（隣接平均） === 🟩【追加】
 for df_sub in [positive_peaks, negative_peaks]:
-    df_sub['800nm_smooth'] = df_sub['800nm'].rolling(window=peakAveragePoint).mean()
-    df_sub['940nm_smooth'] = df_sub['940nm'].rolling(window=peakAveragePoint).mean()
+    df_sub['800nm_smooth'] = df_sub['800nm'].rolling(window=peakAveragePoint,min_periods=1).mean()
+    df_sub['940nm_smooth'] = df_sub['940nm'].rolling(window=peakAveragePoint,min_periods=1).mean()
 
 # === スムージング後データを統合 === 🟩【追加】
 merged_data = pd.concat([positive_peaks, negative_peaks], ignore_index=True)
@@ -288,100 +288,47 @@ merged_data = merged_data.sort_values('continueTime').reset_index(drop=True)
 # 連続する'continueNum'の組み合わせを特定
 continuous_combinations = [(merged_data['continueNum'].iloc[i], merged_data['continueNum'].iloc[i+1]) for i in range(len(merged_data) - 1) if merged_data['continueNum'].iloc[i+1] - merged_data['continueNum'].iloc[i] == 1]
 
+
+# Peak-time-ave と Peak-Peak を計算
 merged_data['Peak_time_ave'] = np.nan
-for num1, num2 in continuous_combinations:
-    merged_data.loc[(merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2), 'Peak_time_ave'] = (merged_data['continueTime'] + merged_data['continueTime'].shift(-1)) / 2
-
-
-# === スムージング後の値でPeak-Peak計算 === 🟩【変更点】
 merged_data['800nm_Peak-Peak'] = np.nan
 merged_data['940nm_Peak-Peak'] = np.nan
 
 for num1, num2 in continuous_combinations:
-    merged_data.loc[
-        (merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2),
-        '800nm_Peak-Peak'
-    ] = abs(merged_data['800nm_smooth'].shift(-1)) + abs(merged_data['800nm_smooth'])
+    # num1 の行の index
+    idx1 = merged_data.index[merged_data['continueNum'] == num1].tolist()
+    # num2 の行の index
+    idx2 = merged_data.index[merged_data['continueNum'] == num2].tolist()
 
-    merged_data.loc[
-        (merged_data['continueNum'] == num1) & (merged_data['continueNum'].shift(-1) == num2),
-        '940nm_Peak-Peak'
-    ] = abs(merged_data['940nm_smooth'].shift(-1)) + abs(merged_data['940nm_smooth'])
+    # 1つずつペアにして処理（基本は1組）
+    for i1, i2 in zip(idx1, idx2):
 
-# === 比率計算（スムージング後） === 🟩【変更点】
-merged_data['ratio_Peak-Peak'] = np.where(
-    merged_data['800nm_Peak-Peak'] != 0,
-    merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak'],
-    np.nan
+        # Peak_time_ave
+        merged_data.loc[i1, 'Peak_time_ave'] =(merged_data.loc[i1, 'continueTime'] + merged_data.loc[i2, 'continueTime']) / 2
+
+        # Peak-Peak（スムージング後）
+        merged_data.loc[i1, '800nm_Peak-Peak'] = (
+            abs(merged_data.loc[i1, '800nm_smooth']) + abs(merged_data.loc[i2, '800nm_smooth'])
+        )
+
+        merged_data.loc[i1, '940nm_Peak-Peak'] = (
+            abs(merged_data.loc[i1, '940nm_smooth']) + abs(merged_data.loc[i2, '940nm_smooth'])
+        )
+
+# ratio
+merged_data['ratio_Peak-Peak'] = (
+    merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak']
 )
 
-###
-###
-##
-dc_df = pd.read_excel(
-    file_name, 
-    usecols=['time760nm', 'dc760nm', 'time940nm', 'dc940nm']
-).reset_index(drop=True)
-
-
-merged_data = merged_data.dropna(subset=['Peak_time_ave'])
-dc_df = dc_df.dropna(subset=['time760nm'])
-dc_df = dc_df.dropna(subset=['time940nm'])
-merged_data['time_int'] = merged_data['Peak_time_ave'].astype(int)
-dc_df['time760nm_int'] = dc_df['time760nm'].astype(int)
-dc_df['time940nm_int'] = dc_df['time940nm'].astype(int)
-
-# 760nm DCをマージ
-merged_data = pd.merge(
-    merged_data,
-    dc_df[['time760nm_int', 'dc760nm']],
-    how='left',
-    left_on='time_int',
-    right_on='time760nm_int'
-)
-
-# 940nm DCをマージ
-merged_data = pd.merge(
-    merged_data,
-    dc_df[['time940nm_int', 'dc940nm']],
-    how='left',
-    left_on='time_int',
-    right_on='time940nm_int'
-)
-
-# === 比率計算（スムージング後 + DC成分） === 🟩【変更点】
-# merged_data['ratio_Peak-Peak_ACDC'] = (merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak']) *(merged_data['dc760nm'] / merged_data['dc940nm'])
-merged_data['ratio_Peak-Peak'] = np.where(
-    (merged_data['800nm_Peak-Peak'] != 0) & (merged_data['dc940nm'] != 0),
-    (merged_data['940nm_Peak-Peak'] / merged_data['800nm_Peak-Peak'])*(merged_data['dc760nm'] / merged_data['dc940nm']),
-    np.nan
-)
-###
-###
-###
 
 df2 = merged_data[['peak_number1', 'A', 'B', 'D']]
 df3 = merged_data[['continueNum', 'continueTime', '800nm', '940nm']]
 df4 = merged_data[['continueNum', 'continueTime', '800nm', '940nm', 'Peak_time_ave', '800nm_Peak-Peak', '940nm_Peak-Peak', 'ratio_Peak-Peak']]
-df5 = merged_data[[
-    'continueNum', 'continueTime','Peak_time_ave',
-    '800nm_Peak-Peak', '940nm_Peak-Peak','time760nm_int', 'dc760nm','time940nm_int', 'dc940nm',
-    'ratio_Peak-Peak'
-]]
-
-
-
 
 merged_data = merged_data.dropna(subset=['Peak_time_ave', 'ratio_Peak-Peak'])
+
 df.reset_index(drop=True, inplace=True)
 merged_data.reset_index(drop=True, inplace=True)
-
-df6= df5.dropna(subset=[
-    'continueNum', 'continueTime','Peak_time_ave',
-    '800nm_Peak-Peak', '940nm_Peak-Peak', 'time760nm_int', 'dc760nm',
-    'time940nm_int', 'dc940nm', 'ratio_Peak-Peak'
-])
-print(merged_data.head(5))
 
 df_rasio = pd.concat([merged_data[['Peak_time_ave', 'ratio_Peak-Peak']], df[['OxyTime', 'Spo2']]], axis=1)
 df_rasio_int = df_rasio.copy()
@@ -466,12 +413,12 @@ df_940_all = df_940_all.sort_values('Time').reset_index(drop=True)
 
 
 ratio_median = df_rasio_int.loc[
-    (df_rasio_int['Peak_time_ave']>= calibrationTimeStart) & (df_rasio_int['Peak_time_ave'] <= calibrationTimeEnd),
+    (df_rasio_int['Peak_time_ave'] >= calibrationTimeStart) & (df_rasio_int['Peak_time_ave'] <= calibrationTimeEnd),
     'ratio_Peak-Peak'
 ].median()
 
 subset = df_rasio_int.loc[
-    (df_rasio_int['Peak_time_ave']>= calibrationTimeStart) & (df_rasio_int['Peak_time_ave'] <= calibrationTimeEnd),
+    (df_rasio_int['Peak_time_ave'] >= calibrationTimeStart) & (df_rasio_int['Peak_time_ave'] <= calibrationTimeEnd),
     'ratio_Peak-Peak'
 ]
 
@@ -547,6 +494,8 @@ def plot_ratio_and_spo2(df,name):
     df['ratio_Peak-Peak_MA'] = df['ratio_Peak-Peak'].rolling(window=movingAveragePoint).mean()
     ax1.plot(df['Peak_time_ave'], df['ratio_Peak-Peak_MA'], color=color1, label='ratio')
     ax1.tick_params(axis='y', labelcolor=color1,labelsize=14)
+    # ax1.set_ylim(0.95, 1.25)
+    #ax1.set_ylim(0.95, 1.55)
     ax2 = ax1.twinx()  # 2つ目の縦軸を作成
     color2 = 'tab:blue'
     ax2.set_ylabel('Spo2', color=color2 ,fontsize=16)
@@ -576,6 +525,8 @@ def plot_ratio_and_spo2_nocut(df,name):
     df['ratio_Peak-Peak_MA'] = df['ratio_Peak-Peak']
     ax1.plot(df['Peak_time_ave'], df['ratio_Peak-Peak_MA'], color=color1, label='ratio')
     ax1.tick_params(axis='y', labelcolor=color1,labelsize=14)
+    # ax1.set_ylim(0.95, 1.25)
+    #ax1.set_ylim(0.95, 1.55)
     ax2 = ax1.twinx()  # 2つ目の縦軸を作成
     color2 = 'tab:blue'
     ax2.set_ylabel('Spo2', color=color2 ,fontsize=16)
@@ -615,7 +566,7 @@ for i in range(len(df_rasio_int)):
 
 new_df = pd.DataFrame(new_data)
 all_new_df = pd.DataFrame(all_new_data)
-plot_ratio_and_spo2_nocut(all_new_df,"all_plot_data")
+plot_ratio_and_spo2_nocut(all_new_df,"all_plot")
 new_df["Spo2_int"] = np.floor(new_df["Spo2"]).astype(int)
 sample_counts = new_df.groupby("Spo2_int").size().reset_index(name="n_samples")
 sample_counts["weight"] = np.sqrt(sample_counts["n_samples"])
@@ -657,7 +608,7 @@ for i in range(len(df_rasio_int)):
                     continue
             elif ratio < lower_limit or ratio > upper_limit:
                 continue
-
+            # 条件を通過したデータを保存
             new_data_dyn.append({
                 'Peak_time_ave': df_rasio_int.at[i, 'Peak_time_ave'],
                 'ratio_Peak-Peak': ratio,
@@ -695,7 +646,7 @@ plt.ylabel('SpO2 [%]', fontsize=16)
 plt.legend()
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-plt.xlim(0.5, 2.1)
+plt.xlim(0.8, 2.1)
 plt.ylim(75, 102.5)
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/cutted_plot.png")
 plt.show()
@@ -792,7 +743,7 @@ df_bland_altman['BlandAltman_diff'] = (
 # ==========================================
 bias = df_bland_altman['BlandAltman_diff'].mean()
 sd = df_bland_altman['BlandAltman_diff'].std()
-# 精度（Precision）= ±1.96 × SD
+# 精度（Precision）= ±1.96×SD
 #「精密度」はしばしば ±1.96 × SD（測定値の差の標準偏差） の範囲で示されます。(95%範囲)
 precision = 1.96 * sd
 
@@ -926,15 +877,13 @@ with pd.ExcelWriter(output_file_name) as writer:
     new_df_include_sample_num.to_excel(writer, sheet_name='time_weight')
     median_df.to_excel(writer, sheet_name='median')
     new_df_with_est.to_excel(writer, sheet_name='comp_spo2') 
-    new_df.to_excel(writer, sheet_name='result_relation_spo2')
-    df_rasio.to_excel(writer, sheet_name='result')
+    df_new_cutted.to_excel(writer, sheet_name='result_relation_spo2')
     df_rasio_int.to_excel(writer, sheet_name='correct_time_result')
-    df.to_excel(writer, sheet_name='original')
-    df2.to_excel(writer, sheet_name='sameTimePeak')
-    df3.to_excel(writer, sheet_name='continuePeak')
+    df_rasio.to_excel(writer, sheet_name='result')
     df4.to_excel(writer, sheet_name='rasioPeak')
-    df5.to_excel(writer, sheet_name='acdc')
-    df6.to_excel(writer, sheet_name='acdc_nullcutted')
+    df3.to_excel(writer, sheet_name='continuePeak')
+    df2.to_excel(writer, sheet_name='sameTimePeak')
+    df.to_excel(writer, sheet_name='original')
     merged_data.to_excel(writer, sheet_name='AllDate')
 
 
@@ -950,7 +899,7 @@ plt.scatter(all_new_df['ratio_Peak-Peak'], all_new_df['Spo2'])
 plt.xlabel('ratio', fontsize=16)
 plt.ylabel('SpO2 [%]', fontsize=16)
 plt.legend()
-plt.xlim(0.5, 2.1) 
+plt.xlim(0.8, 2.1) 
 plt.ylim(75, 102.5) 
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/all_plot.png")
 plt.show()
@@ -963,7 +912,7 @@ plt.scatter(new_df['ratio_Peak-Peak'], new_df['Spo2'], label='cutted data')
 plt.xlabel('ratio', fontsize=16)
 plt.ylabel('SpO2 [%]', fontsize=16)
 plt.legend()
-plt.xlim(0.5, 2.1) 
+plt.xlim(0.8, 2.1) 
 plt.ylim(75, 102.5) 
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/cal_cutted_plot.png")
 plt.show()
@@ -977,7 +926,7 @@ plt.title('median')
 plt.legend()
 plt.xticks(fontsize=18)
 plt.yticks(fontsize=18)
-plt.xlim(0.5, 2.1) 
+plt.xlim(0.8, 2.1) 
 plt.ylim(75, 102.5) 
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/median.png")
 plt.show()
@@ -994,7 +943,7 @@ plt.title('cutted Data (new_data_dyn)', fontsize=16)
 plt.legend()
 plt.xticks(fontsize=18)
 plt.yticks(fontsize=18)
-plt.xlim(0.5, 2.1)
+plt.xlim(0.8, 2.1)
 plt.ylim(75, 102.5)
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/new_data_dyn.png")
 plt.show()
@@ -1017,7 +966,7 @@ plt.title('median')
 plt.legend()
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-plt.xlim(0.5, 2.1)
+plt.xlim(0.8, 2.1)
 plt.ylim(75, 102.5)
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/median_fit.png")
 plt.show()
@@ -1042,7 +991,7 @@ plt.title('with weight')
 plt.legend()
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-plt.xlim(0.5, 2.1)
+plt.xlim(0.8, 2.1)
 plt.ylim(75, 102.5)
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/median_fit_with_weight.png")
 plt.show()
@@ -1067,7 +1016,7 @@ plt.title('cutted & weight')
 plt.legend()
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-plt.xlim(0.5, 2.1)
+plt.xlim(0.8, 2.1)
 plt.ylim(75, 102.5)
 plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/cutted_median_fit_with_weight.png")
 plt.show()

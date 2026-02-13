@@ -13,11 +13,11 @@ file_name = 'C:/Users/mpg/Desktop/python_rasio/peak.xlsx' #Peakのファイル�
 peakAveragePoint = 3        #脈波ピークに対する隣接平均のポイント数 (default:3)
 movingAveragePoint=13       #波形全体に対する隣接平均のポイント数 (default:30)
 calibrationAveragePoint=10  #実験開始30秒間の隣接平均のポイント数
-calibrationTimeStart=70     #キャリブレーション開始 (defalult:10)
-calibrationTimeEnd=100       #キャリブレーション終了時間 (defalult:40)
-slope_num=300.26            #推定式の傾き
-intercept=-193.34           #事前キャリブレーションによる切片
-base_slope_num=345.82     #この実験のデータの傾き
+calibrationTimeStart=20     #キャリブレーション開始 (defalult:10)
+calibrationTimeEnd=50       #キャリブレーション終了時間 (defalult:40)
+slope_num=355.42          #推定式の傾き
+intercept=-187.58           #事前キャリブレーションによる切片
+base_slope_num=324.62     #この実験のデータの傾き
 k = 2                     #±2SD=95% , ±1.5SD = 86.6% , ±1SD = 68.8%　が格納される範囲(±k SD)
 heartRateAve = 15           #脈拍に対する隣接平均のポイント数
 min_hr = 35                 #脈拍数の下限 (bpm)
@@ -555,7 +555,7 @@ def plot_ratio_and_spo2(df,name):
     ax1.legend(loc='upper left')  # Camera のラベルを左上に表示
     ax2.legend(loc='upper right')  # OxyTrue のラベルを右上に表示
     fig.tight_layout()  # レイアウトの調整
-    plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/spo2_ratio_line_{name}.png")  # 画像を保存
+    plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/spo2_ratio_lines_{name}.png")  # 画像を保存
     plt.show()
 
 
@@ -574,8 +574,6 @@ def plot_ratio_and_spo2_nocut(df,name):
     df['ratio_Peak-Peak_MA'] = df['ratio_Peak-Peak']
     ax1.plot(df['Peak_time_ave'], df['ratio_Peak-Peak_MA'], color=color1, label='ratio')
     ax1.tick_params(axis='y', labelcolor=color1,labelsize=14)
-    ax1.set_ylim(0.95, 1.25)
-    #ax1.set_ylim(0.95, 1.55)
     ax2 = ax1.twinx()  # 2つ目の縦軸を作成
     color2 = 'tab:blue'
     ax2.set_ylabel('Spo2', color=color2 ,fontsize=16)
@@ -586,7 +584,7 @@ def plot_ratio_and_spo2_nocut(df,name):
     ax1.legend(loc='upper left')  # Camera のラベルを左上に表示
     ax2.legend(loc='upper right')  # OxyTrue のラベルを右上に表示
     fig.tight_layout()  # レイアウトの調整
-    plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/spo2_ratio_line_{name}.png")  # 画像を保存
+    plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/spo2_ratio_line1_{name}.png")  # 画像を保存
     plt.show()
 
 
@@ -615,7 +613,7 @@ for i in range(len(df_rasio_int)):
 
 new_df = pd.DataFrame(new_data)
 all_new_df = pd.DataFrame(all_new_data)
-plot_ratio_and_spo2_nocut(all_new_df,"all_plot")
+plot_ratio_and_spo2_nocut(all_new_df,"all_plot111")
 
 
 
@@ -863,7 +861,7 @@ plt.grid(True)
 # 精密度をグラフ上に描画
 plt.text(10, 101, f'Precision (slope:{slope_num}) = ±{precision:.2f}[%]', fontsize=16, color='red')
 plt.tight_layout()
-plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/compSpO2_base_slope_{base_slope_num}_cutted.png")
+plt.savefig(f"C:/Users/mpg/Desktop/python_rasio/output_image/compSpO2_base_slope1_{base_slope_num}_cutted.png")
 plt.show()
 
 plt.figure(figsize=(10, 6))
@@ -971,7 +969,7 @@ plt.ylabel('SpO2 [%]', fontsize=16)
 plt.legend()
 plt.xlim(0.5, 2.1) 
 plt.ylim(75, 102.5) 
-plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/all_plot.png")
+plt.savefig("C:/Users/mpg/Desktop/python_rasio/output_image/all_plotss.png")
 plt.show()
 
 
